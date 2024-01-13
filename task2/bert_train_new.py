@@ -1,12 +1,9 @@
-import torch
 import torch.nn as nn
 from transformers import BertModel
 from torch.utils.data import DataLoader
 import logging
-from sklearn import metrics
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
-from torch.nn.functional import softmax
 import sys
 from multiprocessing import freeze_support
 # 配置日志输出格式和级别
