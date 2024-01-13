@@ -120,7 +120,6 @@ def replace_line(lines):
         new_lines.append(temp)
     return new_lines
 
-
 #开头字母转小写
 def replaceHeadBig(word):
     if word == '' or word == None:
