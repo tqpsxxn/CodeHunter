@@ -6,6 +6,7 @@ from torch.utils.data import Dataset
 from transformers import BertTokenizer
 import sys
 from multiprocessing import freeze_support
+
 # 配置日志输出格式和级别
 logging.basicConfig(filename='training.log', level=logging.INFO,
                     format='%(asctime)s [%(levelname)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
