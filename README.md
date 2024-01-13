@@ -12,6 +12,7 @@ Used to locate code that may have exceptions, i.e. try block localization
 ## Introduction
 Used to predict the types of exceptions that may arise from possible abnormal code lines
 
+
 ## How to run?
 1. Download the compressed file task2_data.zip from [https://pan.quark.cn/s/cf7647ede57c](https://pan.quark.cn/s/cf7647ede57c) and unzip it to the task2/data directory
 2. run `python prepare_bert.py` to preprocess data
