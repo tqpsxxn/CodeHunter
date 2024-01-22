@@ -309,6 +309,7 @@ def parse_feature_tokens(programast):
                 codes.append("}")
 
         if (hasattr(programast, 'else_statement') and programast.else_statement != None):
+            codes.append("ELSE")
             if (isinstance(programast.else_statement, list)):
                 for i in programast.else_statement:
                     codes.append("{")
