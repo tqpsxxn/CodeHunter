@@ -21,7 +21,7 @@ Used to predict the types of exceptions that may arise from possible abnormal co
 4. Run `python bert_train_new.py test_topn 40` to test model
 
 
-# plugin
+# IDE Plugin
 ## Introduction
 users can use the functions provided by the IDE plugin to detect and handle exceptions in the program code automatically.
 
