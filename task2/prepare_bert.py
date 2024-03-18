@@ -185,45 +185,50 @@ def mask_slicing_with_ast(dataset):
         # all_len = 0
         # len_256 = 0
         for i, (s, t) in enumerate(zip(origin_src, origin_tgt)):
-            s = s.strip()
-            if not re.match(r'\w+', s):
-                print(s)
-                s = re.sub(r'^.*?(\w+)', r' \1', s)
-                print(s)
-            s = re.sub(r'\\\\', ' ', s)
-            s = re.sub(r'\\ "', ' \\"', s)
-            # 拼接处完整的函数，进行ast解析
-            func = s + t + " }"
-            func_tokens = ast_bert_data_process_util_for_catch.get_feature_tokens_for_catch(func)
-            s = " ".join(func_tokens)
-            try:
-                print(str(i) + " " + s + " " + str(len(func_tokens)))
-            except Exception as e:
-                print(str(i) + " " + func + " " + str(len(func_tokens)))
-
-            try_idx = get_try_index_for_ast(func_tokens)
-
-            # all_len = all_len + 1
-            # if(try_idx > 128):
-            #     len_256  = len_256 + 1
-            # print("len > 256    " + str(len_256/all_len))
-
-            catch_idex = get_catch_index_for_ast(func_tokens)
-            if not try_idx:
-                print('try not found: ', s)
-                exit(-1)
-            if not catch_idex:
-                print('catch not found: ', s)
-                exit(-1)
-
-            front = func_tokens[:try_idx]
-            back = func_tokens[try_idx:catch_idex]
-
+            front, back = handle_codes_with_ast(s, t)
             # 输出
             fwf.write(" ".join(front)+'\n')
             fwb.write(" ".join(back)+'\n')
             fwtokens.write(s + '\n')
             fwt.write(t)
+
+
+def handle_codes_with_ast(s, t = None):
+    s = s.strip()
+    if not re.match(r'\w+', s):
+        print(s)
+        s = re.sub(r'^.*?(\w+)', r' \1', s)
+        print(s)
+    s = re.sub(r'\\\\', ' ', s)
+    s = re.sub(r'\\ "', ' \\"', s)
+    # 拼接处完整的函数，进行ast解析
+    func = s
+    if (t != None):
+        func = s + t + " }"
+    func_tokens = ast_bert_data_process_util_for_catch.get_feature_tokens_for_catch(func)
+    s = " ".join(func_tokens)
+    try_idx = get_try_index_for_ast(func_tokens)
+    catch_idex = get_catch_index_for_ast(func_tokens)
+    if not try_idx:
+        print('try not found: ', s)
+        exit(-1)
+    if not catch_idex:
+        print('catch not found: ', s)
+        exit(-1)
+
+    front = func_tokens[:try_idx]
+    back = func_tokens[try_idx:catch_idex]
+    return front, back
+
+def predict_data_process(code_lines, begin_position, end_position):
+    code_lines = code_lines.split("\n")
+    new_lines = '\n'.join(code_lines[0:begin_position]) + "\n"
+    new_lines = new_lines + "try {" + "\n"
+    new_lines = new_lines + '\n'.join(code_lines[begin_position: end_position + 1])  + '\n'
+    new_lines = new_lines + '} catch ( Exception e ) { } ' + "\n"
+    new_lines = new_lines + '\n'.join(code_lines[end_position + 1:])
+    front, back = handle_codes_with_ast(s = new_lines)
+    return ' '.join(front), ' '.join(back)
 
 #数据预处理 生成了src-use.front  src-use.back src-use.mask 三个文件，这三个文件是task2模型的输入
 def use_mask_slicing(dataset, input_file):
@@ -450,34 +455,33 @@ def extract_exception_count_drex(dataset):
         for i, (exception, count) in enumerate(count_exception):
             fwf.write(exception + ":" + str(count) + "\n")
 
-# 数据统计
-# extract_exception_count('train')
-# extract_exception('train')
-# extract_exception_distinct('train')
 
-# 处理drex数据
-# extract_exception_count_drex('train')
-# extract_exception_count_drex('test')
-# extract_exception_count_drex('valid')
-# handle_exception_data_from_drex('train')
-# handle_exception_data_from_drex('test')
-# handle_exception_data_from_drex('valid')
+if __name__ == '__main__':
+    # 数据统计
+    # extract_exception_count('train')
+    # extract_exception('train')
+    # extract_exception_distinct('train')
 
+    # 处理drex数据
+    extract_exception_count_drex('train')
+    extract_exception_count_drex('test')
+    extract_exception_count_drex('valid')
+    handle_exception_data_from_drex('train')
+    handle_exception_data_from_drex('test')
+    handle_exception_data_from_drex('valid')
 
+    # 处理nexgen数据
+    # mask_slicing('train')
+    # mask_slicing('valid')
+    # mask_slicing('test')
+    # handle_exception_data('test')
+    # handle_exception_data('valid')
+    # handle_exception_data('train')
 
-# 处理nexgen数据
-mask_slicing('train')
-mask_slicing('valid')
-mask_slicing('test')
-handle_exception_data('test')
-handle_exception_data('valid')
-handle_exception_data('train')
-
-
-# 处理nexgen数据，携带ast
-# mask_slicing_with_ast('train')
-# mask_slicing_with_ast('valid')
-# mask_slicing_with_ast('test')
-# handle_exception_data_from_nexgen_ast('test')
-# handle_exception_data_from_nexgen_ast('valid')
-# handle_exception_data_from_nexgen_ast('train')
+    # 处理nexgen数据，携带ast
+    mask_slicing_with_ast('train')
+    mask_slicing_with_ast('valid')
+    mask_slicing_with_ast('test')
+    handle_exception_data_from_nexgen_ast('test')
+    handle_exception_data_from_nexgen_ast('valid')
+    handle_exception_data_from_nexgen_ast('train')

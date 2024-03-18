@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 from transformers import AutoTokenizer
 import traceback
-from ast_bert_data_process_util import get_feature_tokens
+from ast_bert_data_process_util import get_feature_tokens,get_feature_tokens_for_api
 import logging
 logging.basicConfig(filename='new_data_process.log', level=logging.DEBUG)
 
@@ -119,6 +119,41 @@ def replace_line(lines):
             temp = " ".join(i_words)
         new_lines.append(temp)
     return new_lines
+
+
+def predict_data_process(model, data, line_limit, word_max_length):
+    #  ast解析
+    tags = [0] * len(data)
+    code_lines, tags = get_feature_tokens_for_api(data, tags)
+    lines_count = len(code_lines)
+    if (len(code_lines) == 0):
+        return {}
+    # 把lines处理成line_limit长度
+    code_lines = limit_lines_length(code_lines, line_limit, word_max_length)
+    tags = limit_tags_length(tags, line_limit)
+    # 解析代码
+    code_lines = [line.strip() for line in code_lines]
+    # 变量名替换
+    code_lines = replace_line(code_lines)
+    func_data = []
+    tokenizer = model.getTokenizer()
+    for j, line in enumerate(code_lines):
+        code = code_lines[j]
+        label = tags[j]
+        input_ids, length = tokenize_and_encode(code, tokenizer, word_max_length)
+        func_data.append((input_ids, label, length))
+    # 将每一行代码的编码以及对应的标签合并到一个list中，并将其保存到一个字典中
+    func_data = list(zip(*func_data))
+    # 处理成bert模型需要的格式，lines表示每一行代码，labels表示每行代码的标记，lengths表示attention_mask,attention_mask表示一行中哪些单词是需要进行训练的（0）
+    # 如果是填充的则不需要用于训练（1）
+    func_dict = {
+        'lines': func_data[0],
+        'labels': func_data[1],
+        'mask': func_data[2],
+        'lines_count': lines_count
+    }
+    return func_dict
+
 
 #开头字母转小写
 def replaceHeadBig(word):

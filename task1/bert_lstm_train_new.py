@@ -14,6 +14,7 @@ from sklearn import metrics
 from multiprocessing import freeze_support
 import sys
 import os
+from ast_bert_data_process import predict_data_process
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -61,6 +62,7 @@ class CodeDataset(Dataset):
             return {"lines": lines, "labels": labels, "attention_mask": lengths, "lines_count": lines_count}
         except Exception as e:
             return {"lines": torch.zeros([50, 20], dtype=torch.long), "labels": torch.zeros([50], dtype=torch.long), "attention_mask": torch.zeros([50, 20], dtype=torch.long), "lines_count": lines_count}
+
 
 def evaluate(model, data_loader, device):
     criterion = nn.CrossEntropyLoss().to(device)
@@ -194,7 +196,7 @@ def train_model(start_epoch, num_epochs):
                                   num_workers=workers)
 
     # 模型初始化
-    model = BERTBiLSTMClassifier(batch_size = batch_size, num_classes=2)
+    model = BERTBiLSTMClassifier(num_classes=2)
     if start_epoch == None or start_epoch < 0:
         start_epoch = 0
     model.to(device)
@@ -217,6 +219,33 @@ def train_model(start_epoch, num_epochs):
         detail_logger.info(f"Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f} - Accuracy: {accuracy:.4f}")
         evaluate(model, valid_dataloader, device)
 
+def predict(model, device, data):
+
+    # 数据初始化
+    line_limit = 50
+    word_max_length = 64
+    code_lines = data.split("\n")
+    func_dict = predict_data_process(model, code_lines, line_limit, word_max_length)
+    lines = func_dict['lines']
+    mask = func_dict['mask']
+    # 将所有代码行转换为 PyTorch 的 tensor 格式
+    lines = torch.tensor(lines, dtype=torch.long)
+    # 将所有代码mask转换为 PyTorch 的 tensor 格式
+    mask = torch.tensor(mask, dtype=torch.long)
+    lines = lines.unsqueeze(0)
+    mask = mask.unsqueeze(0)
+
+
+    lines_batch = lines.to(device)
+    attention_mask_batch = mask.to(device)
+    outputs = model(lines_batch, attention_mask=attention_mask_batch)
+    _, predicted_labels_batch = torch.max(outputs, dim=2)
+    predicted_labels_batch = predicted_labels_batch.squeeze()
+    predicted_labels_batch = predicted_labels_batch.tolist()
+    return predicted_labels_batch
+
+
+
 # 调用训练函数
 if __name__ == '__main__':
     freeze_support()
@@ -231,9 +260,28 @@ if __name__ == '__main__':
         test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False,
                                       num_workers=workers)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = BERTBiLSTMClassifier(batch_size = batch_size, num_classes=2)
+        model = BERTBiLSTMClassifier(num_classes=2)
         filename = f'checkpoints/bert_bilstm_ast_%d.pth.tar' % int(epoch)
         model_state_dict = torch.load(filename)
         model.load_state_dict(model_state_dict)
         model.to(device)
         evaluate(model, test_dataloader, device)
+    elif mode == 'predict':
+        data = '''public static void unGunzipFile ( String compressedFile , String decompressedFile ) {
+        byte [ ] buffer = new byte [ 1024 ] ;
+        FileSystem fs = FileSystem . getLocal ( new Configuration ( ) ) ;
+        FSDataInputStream fileIn = fs . open ( new Path ( compressedFile ) ) ;
+        GZIPInputStream gZIPInputStream = new GZIPInputStream ( fileIn ) ;
+        FileOutputStream fileOutputStream = new FileOutputStream ( decompressedFile ) ;
+        int bytes_read ;
+        while ( ( bytes_read = gZIPInputStream . read ( buffer ) ) > 0 ) {
+            fileOutputStream . write ( buffer , 0 , bytes_read ) ;
+        }
+        gZIPInputStream . close ( ) ;
+        fileOutputStream . close ( ) ;
+        }'''
+        res = predict(data)
+        print(res)
+
+
+

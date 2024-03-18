@@ -56,6 +56,46 @@ def get_feature_tokens(code_lines, tags):
         pass
     return new_lines,new_tags
 
+#严格保持原来的行号
+def get_feature_tokens_for_api(code_lines, tags):
+    # 原始的代码
+    old_lines = code_lines
+    # 去除空格 格式化处理之后的代码
+    code_lines = [re.sub(r"\s*([().])\s*", r"\1", line) for line in code_lines]
+    code_lines = [line.replace("\r", " ") for line in code_lines]
+    code_lines = [line.replace("\t", " ") for line in code_lines]
+
+
+    feature_tokens = []
+    new_tags  = []
+    new_lines = []
+    try:
+        # tree = javalang.parse.parse("public void test(){log.info("")};")
+        codestr = '\n'.join(code_lines)
+        programtokens = javalang.tokenizer.tokenize(codestr)
+        # print("programtokens",list(programtokens))
+        parser = javalang.parse.Parser(programtokens)
+        programast = parser.parse_member_declaration()
+        # 递归处理，获取每一行的标记
+        feature_tokens = parse_feature_tokens(programast)
+        # 加上最后一行标识（方法的反括号：'}'）
+        feature_tokens.update({len(code_lines): ['MethodDeclaration', 'END']})
+        for i in range(len(code_lines)):
+            # 行号 获取范围，如果多行代码在经过ast解析之后在同一行，那么需要进行合并
+            new_line = ''
+            new_line = new_line + old_lines[i]
+            if(feature_tokens.get(i + 1) != None):
+                feature_token = ' '.join(feature_tokens.get(i + 1))
+                new_line = new_line + feature_token
+            new_tags.append(tags[i])
+            new_lines.append(new_line)
+        return new_lines,new_tags
+    except Exception as e:
+        # logging.error("get_feature_tokens error")
+        pass
+    return new_lines,new_tags
+
+
 # 递归读取语法树结构，构造出 {1 : "ast info"} 格式数据，其中1表示代码的第几行，下标从1开始
 def parse_feature_tokens(programast):
     res = {}

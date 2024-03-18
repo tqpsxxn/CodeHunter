@@ -6,6 +6,9 @@ from torch.utils.data import Dataset
 from transformers import BertTokenizer
 import sys
 from multiprocessing import freeze_support
+import torch
+from sklearn import metrics
+from prepare_bert import predict_data_process
 
 # 配置日志输出格式和级别
 logging.basicConfig(filename='training.log', level=logging.INFO,
@@ -51,7 +54,7 @@ class CustomModel(nn.Module):
 
         # 加载预训练的BERT模型
         self.bert = BertModel.from_pretrained(bert_model)
-
+        self.tokenizer = BertTokenizer.from_pretrained(bert_model)
         # 分别定义两个LSTM用于捕获序列信息
         self.lstm_before_try = nn.LSTM(self.bert.config.hidden_size, lstm_hidden_size, batch_first=True, bidirectional=True)
         self.lstm_in_try = nn.LSTM(self.bert.config.hidden_size, lstm_hidden_size, batch_first=True, bidirectional=True)
@@ -59,6 +62,9 @@ class CustomModel(nn.Module):
         # 全连接层和激活函数
         self.fc = nn.Linear(lstm_hidden_size * 4, num_classes)
         self.activation = nn.ReLU()
+
+    def get_tokenizer(self):
+        return self.tokenizer
 
     def forward(self, input_ids_before, attention_mask_before, input_ids_in_try, attention_mask_in_try):
         # 获取BERT的输出
@@ -107,9 +113,6 @@ def evaluate(model, data_loader, device):
     return accuracy, precision, recall, f1
 
 
-import torch
-from sklearn import metrics
-
 
 def evaluate_topn(model, data_loader, device, n=1):
     model.eval()
@@ -138,6 +141,16 @@ def evaluate_topn(model, data_loader, device, n=1):
     topn_accuracy = correct_samples / total_samples
     return topn_accuracy
 
+
+def read_txt_to_dict(file_path):
+    result_dict = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            line = line.strip()
+            if line:
+                key, value = line.split(':')
+                result_dict[key] = value
+    return result_dict
 
 def train(version):
     if version == None:
@@ -246,6 +259,44 @@ def train(version):
             filename = f'checkpoints/bert_bilstm_for_catch_nexgen_%d.pth.tar' % epoch
         torch.save(model.state_dict(), filename)
 
+def predict(model, device, code_lines, begin_position, end_position):
+
+
+    # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    tokenizer = model.get_tokenizer()
+    max_length = 256
+    # 调用AST处理数据
+    before_try_text, in_try_text = predict_data_process(code_lines, begin_position, end_position)
+
+    inputs_in_try = tokenizer(in_try_text, padding='max_length', truncation=True, max_length=max_length,
+                                   return_tensors="pt")
+    inputs_before_try = tokenizer(before_try_text, padding='max_length', truncation=True,
+                                       max_length=max_length, return_tensors="pt")
+    # 调用模型预测
+    input_ids_before = inputs_before_try['input_ids']
+    attention_mask_before = inputs_before_try['attention_mask']
+    input_ids_in_try = inputs_in_try['input_ids']
+    attention_mask_in_try =  inputs_in_try['attention_mask']
+    input_ids_before = input_ids_before.to(device)
+    attention_mask_before = attention_mask_before.to(device)
+    input_ids_in_try = input_ids_in_try.to(device)
+    attention_mask_in_try = attention_mask_in_try.to(device)
+    outputs = model(input_ids_before, attention_mask_before, input_ids_in_try, attention_mask_in_try)
+    outputs = outputs.squeeze()
+    # 获取Top-N预测结果
+    probabilities = torch.nn.functional.softmax(outputs, dim=0)
+    top_n_indices = torch.topk(probabilities, k=10).indices
+    type = top_n_indices[0]
+    type = str(int(type))
+    type_dict = read_txt_to_dict('./exception-class-map-reverse.txt')
+
+    # 返回结果
+    return type_dict[type]
+
+
+
+
+
 if __name__ == '__main__':
     freeze_support()
     mode = sys.argv[1]
@@ -283,8 +334,6 @@ if __name__ == '__main__':
 
         valid_loader = DataLoader(valid_data, batch_size=batch_size, shuffle=False, num_workers=workers)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
         # bert_model = 'bert-base-cased'
         bert_model = 'bert-base-uncased'
 
@@ -303,3 +352,18 @@ if __name__ == '__main__':
                      f"top2: {top2:.4f}, top2: {top3:.4f}, "
                      f"top5: {top5:.4f}, "
                      f"top10: {top10:.4f}, ")
+    elif mode == 'predict':
+        data = '''public static void unGunzipFile ( String compressedFile , String decompressedFile ) {
+                byte [ ] buffer = new byte [ 1024 ] ;
+                FileSystem fs = FileSystem . getLocal ( new Configuration ( ) ) ;
+                FSDataInputStream fileIn = fs . open ( new Path ( compressedFile ) ) ;
+                GZIPInputStream gZIPInputStream = new GZIPInputStream ( fileIn ) ;
+                FileOutputStream fileOutputStream = new FileOutputStream ( decompressedFile ) ;
+                int bytes_read ;
+                while ( ( bytes_read = gZIPInputStream . read ( buffer ) ) > 0 ) {
+                    fileOutputStream . write ( buffer , 0 , bytes_read ) ;
+                }
+                gZIPInputStream . close ( ) ;
+                fileOutputStream . close ( ) ;
+                }'''
+        print(predict(data, 2, 11))
